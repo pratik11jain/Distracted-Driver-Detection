@@ -7,6 +7,7 @@ import sys
 import time
 
 import numpy as np
+import pandas as pd
 from keras import Model
 from keras import backend as K
 from keras.applications import xception, resnet50, mobilenet
@@ -19,13 +20,25 @@ from keras.optimizers import Adam
 from sklearn.cross_validation import LabelShuffleSplit
 from sklearn.metrics import log_loss
 
-from utilities import mkdirp, write_csv
-
 if len(sys.argv) is not 4:
     print("Usage: python main.py <test_true/test_false> <downsample> <model_name>")
     sys.exit(1)
 
 K.set_image_dim_ordering('tf')
+
+
+def mkdirp(path):
+    try:
+        os.makedirs(path)
+    except OSError:
+        pass
+
+
+def write_csv(predictions, ids, dest):
+    df = pd.DataFrame(predictions, columns=['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9'])
+    df.insert(0, 'img', pd.Series(ids, index=df.index))
+    df.to_csv(dest, index=False)
+
 
 # python main.py <test_true/test_false> <downsample> <model_name>
 
@@ -47,7 +60,6 @@ mkdirp(CHECKPOINT_PATH)
 mkdirp(SUMMARY_PATH)
 mkdirp(MODEL_PATH)
 
-# NB_EPOCHS = 25  # 5 if not TESTING else 1
 NB_EPOCHS = 25 if not TESTING else 1
 MAX_FOLDS = 3
 NUM_CLASSES = 10
@@ -213,7 +225,6 @@ def alex_net(weights_path=None):
                      input_shape=(WIDTH, HEIGHT, NB_CHANNELS)))
     model.add(BatchNormalization())
     model.add(Activation('relu'))
-    # model.add(MaxPooling2D(3, 3))
 
     model.add(Conv2D(256, (5, 5), activation="relu"))
     model.add(BatchNormalization())
@@ -221,10 +232,8 @@ def alex_net(weights_path=None):
     model.add(MaxPooling2D(3, 3))
 
     model.add(Conv2D(384, (3, 3), activation="relu"))
-    # model.add(MaxPooling2D(3, 3))
 
     model.add(Conv2D(384, (3, 3), activation="relu"))
-    # model.add(MaxPooling2D(3, 3))
 
     model.add(Conv2D(256, (3, 3), activation="relu"))
     model.add(MaxPooling2D(3, 3))
@@ -290,7 +299,6 @@ def my_model(weights_path=None):
     model.add(Conv2D(256, (3, 3)))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    # model.add(Dropout(0.25))
     model.add(Flatten())
     model.add(Dense(4096, activation='relu'))
     model.add(Dropout(0.5))
@@ -313,20 +321,14 @@ def my_model_2(weights_path=None):
                      input_shape=(WIDTH, HEIGHT, NB_CHANNELS)))
     model.add(BatchNormalization())
     model.add(Activation('relu'))
-    # model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(Conv2D(64, (3, 3)))
-    #model.add(BatchNormalization())
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(Conv2D(128, (3, 3)))
-    #model.add(BatchNormalization())
     model.add(Activation('relu'))
-    # model.add(MaxPooling2D(pool_size=(2, 2)))
     model.add(Conv2D(256, (3, 3)))
-    #model.add(BatchNormalization())
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
-    # model.add(Dropout(0.25))
     model.add(Flatten())
     model.add(Dense(2048, activation='relu'))
     model.add(Dropout(0.5))
@@ -375,8 +377,9 @@ def vgg_bn(weights_path=None):
 
     return model
 
+
 def mobilenet_model():
-    base_model =mobilenet.MobileNet(input_shape=(WIDTH, HEIGHT, NB_CHANNELS), include_top=False)
+    base_model = mobilenet.MobileNet(input_shape=(WIDTH, HEIGHT, NB_CHANNELS), include_top=False)
     x = base_model.output
     x = GlobalAveragePooling2D()(x)
     predictions = Dense(NUM_CLASSES, activation='softmax')(x)
@@ -417,22 +420,11 @@ def res_net_50():
 for train_index, valid_index in LabelShuffleSplit(driver_indices, n_iter=MAX_FOLDS, test_size=0.2, random_state=67):
     print('Fold {}/{}'.format(num_folds + 1, MAX_FOLDS))
 
-    # skip fold if a checkpoint exists for the next one
-    # next_checkpoint_path = os.path.join(CHECKPOINT_PATH, 'model_{}.h5'.format(num_folds + 1))
-    # if os.path.exists(next_checkpoint_path):
-    #     print('Checkpoint exists for next fold, skipping current fold.')
-    #     continue
-
     X_train, y_train = X_train_raw[train_index, ...], y_train_raw[train_index, ...]
     X_valid, y_valid = X_train_raw[valid_index, ...], y_train_raw[valid_index, ...]
     X_train = X_train.transpose(0, 2, 3, 1)
     X_valid = X_valid.transpose(0, 2, 3, 1)
-    # X_test = X_test.transpose(0,2,3,1)
-    # model = vgg_bn()
-    # model = alex_net()
     model = choose_model(MODEL_NAME)
-    # model = res_net_50()
-    # model = my_model_2()
     model_path = os.path.join(MODEL_PATH, 'model_{}.json'.format(num_folds))
     with open(model_path, 'w') as f:
         f.write(model.to_json())
@@ -453,7 +445,7 @@ for train_index, valid_index in LabelShuffleSplit(driver_indices, n_iter=MAX_FOL
     callbacks = [
         EarlyStopping(monitor=MODEL_MONITOR, patience=MODEL_PATIENCE, verbose=1, mode='auto'),
         ModelCheckpoint(checkpoint_path, monitor=MODEL_MONITOR, verbose=1, save_best_only=True, mode='auto'),
-        #TensorBoard(log_dir=summary_path, histogram_freq=1, write_graph=True, write_images=True)  # To Do
+        # TensorBoard(log_dir=summary_path, histogram_freq=1, write_graph=True, write_images=True)  # To Do
         TensorBoard(log_dir=summary_path, write_graph=True, write_images=True)  # To Do
     ]
     model.fit(X_train, y_train,
@@ -469,26 +461,15 @@ for train_index, valid_index in LabelShuffleSplit(driver_indices, n_iter=MAX_FOL
     scores_total.append(score_valid)
     print('Score: {}'.format(score_valid))
 
-    # accuracy = accuracy_score(y_valid, predictions_valid)
-    # accuracies_total.append(accuracy)
-    # print('Accuracy Score: {}'.format(accuracy))
-
     predictions_test = model.predict(X_test, batch_size=100, verbose=1)
     predictions_total.append(predictions_test)
 
     num_folds += 1
 
 min_value = min(scores_total)
-# min_index = accuracies_total.index(min(scores_total))
 min_val, min_index = min((scores_total[i], i) for i in xrange(len(scores_total)))
 
 print('Final chosen model is {} with loss: {}'.format(min_index + 1, scores_total[min_index]))
 
 write_csv(predictions_total[min_index], X_test_ids,
           os.path.join(SUMMARY_PATH, 'predictions_{}_{:.2}.csv'.format(int(time.time()), scores_total[min_index])))
-
-# score_geom = calc_geom(scores_total, MAX_FOLDS)
-# predictions_geom = calc_geom_arr(predictions_total, MAX_FOLDS)
-
-# submission_path = os.path.join(SUMMARY_PATH, 'submission_{}_{:.2}.csv'.format(int(time.time()), score_geom))
-# write_submission(predictions_geom, X_test_ids, submission_path)

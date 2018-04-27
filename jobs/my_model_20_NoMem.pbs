@@ -1,0 +1,12 @@
+#!/bin/bash 
+#PBS -l nodes=2:ppn=32 
+#PBS -l walltime=24:00:00
+#PBS -N my_20_NoMem 
+#PBS -q gpu
+
+cd /N/dc2/scratch/jainps/driverTest
+module unload python
+module load anaconda2
+source activate my_keras
+export LD_LIBRARY_PATH=/N/u/jainps/BigRed2/.conda_envs/my_keras/lib
+aprun python main.py test_false 20 my_model_2
