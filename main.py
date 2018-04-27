@@ -473,3 +473,7 @@ print('Final chosen model is {} with loss: {}'.format(min_index + 1, scores_tota
 
 write_csv(predictions_total[min_index], X_test_ids,
           os.path.join(SUMMARY_PATH, 'predictions_{}_{:.2}.csv'.format(int(time.time()), scores_total[min_index])))
+
+
+
+# Code built on top of: https://github.com/fomorians/distracted-drivers-keras
